@@ -265,18 +265,30 @@ function hidePasswordModal() {
         const errorElement = document.getElementById('passwordError');
         if (errorElement) errorElement.style.display = 'none';
 
-        // 显示主要内容
+        // 显示主要内容区域
         const doubanArea = document.getElementById('doubanArea');
-        if (doubanArea && localStorage.getItem('doubanEnabled') === 'true') {
+        if (doubanArea) {
             doubanArea.style.display = 'block';
             if (typeof initDouban === 'function') {
                 initDouban();
             }
         }
         
+        // 显示其他可能被隐藏的内容区域
+        const contentAreas = ['#mainContent', '.main-content', '#content', '.content'];
+        contentAreas.forEach(selector => {
+            const element = document.querySelector(selector);
+            if (element) {
+                element.style.display = 'block';
+            }
+        });
+        
+        // 设置拦截器，只拦截设置相关操作
+        setTimeout(interceptSettingsAccess, 100);
+        
         // 触发验证成功事件
         document.dispatchEvent(new CustomEvent('passwordVerified'));
-        console.log('密码验证成功事件已触发');
+        console.log('✅ 密码验证成功，用户现在可以正常浏览网站');
     }
 }
 
@@ -354,13 +366,16 @@ function initPasswordProtection() {
     console.log('密码保护状态:', isPasswordProtected());
     console.log('当前验证状态:', isVerified('PASSWORD'));
     
-    // 强制显示密码弹窗（除非已经验证过）
+    // 只在首次访问时显示密码弹窗
     if (!isVerified('PASSWORD')) {
-        console.log('需要验证密码，显示弹窗');
+        console.log('首次访问，需要验证密码，显示弹窗');
         showPasswordModal();
     } else {
-        console.log('密码已验证，无需显示弹窗');
+        console.log('密码已验证，正常访问');
     }
+    
+    // 只拦截设置相关的操作
+    setTimeout(interceptSettingsAccess, 500);
 }
 
 // 管理员密码验证
@@ -439,16 +454,31 @@ window.addEventListener('load', function() {
     }, 1000);
 });
 
-// 阻止未验证用户的操作
-document.addEventListener('click', function(e) {
-    if (!isVerified('PASSWORD')) {
-        // 检查是否点击的是设置按钮或其他需要保护的元素
-        const target = e.target;
-        if (target.onclick && target.onclick.toString().includes('toggleSettings')) {
-            e.preventDefault();
-            e.stopPropagation();
-            showPasswordModal();
-            console.log('拦截了设置按钮点击，显示密码弹窗');
-        }
-    }
-}, true);
+// 只拦截设置相关的操作，不影响正常浏览
+function interceptSettingsAccess() {
+    // 查找设置按钮并添加拦截
+    const settingsSelectors = [
+        '[onclick*="toggleSettings"]',
+        '[onclick*="showSettings"]',
+        '.settings-btn',
+        '#settingsBtn'
+    ];
+    
+    settingsSelectors.forEach(selector => {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(element => {
+            if (!element.hasAttribute('data-password-intercepted')) {
+                element.setAttribute('data-password-intercepted', 'true');
+                element.addEventListener('click', function(e) {
+                    if (!isVerified('PASSWORD')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showPasswordModal();
+                        console.log('🔒 拦截了设置按钮点击，显示密码弹窗');
+                        return false;
+                    }
+                }, true);
+            }
+        });
+    });
+}
