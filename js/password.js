@@ -34,13 +34,25 @@ function isPasswordProtected() {
  * SHA-256实现
  */
 async function sha256(message) {
-    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
-        const msgBuffer = new TextEncoder().encode(message);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('🔢 计算SHA-256，输入:', message);
+    
+    try {
+        if (window.crypto && window.crypto.subtle && window.crypto.subtle.digest) {
+            console.log('✅ 使用Web Crypto API计算SHA-256');
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            console.log('🔐 计算得到的哈希:', hash);
+            return hash;
+        } else {
+            console.log('❌ Web Crypto API不可用');
+            throw new Error('Web Crypto API not supported');
+        }
+    } catch (error) {
+        console.error('💥 SHA-256计算失败:', error);
+        throw error;
     }
-    throw new Error('Web Crypto API not supported');
 }
 
 /**
@@ -132,14 +144,14 @@ function createPasswordModal() {
              background: rgba(0,0,0,0.8); z-index: 10000; justify-content: center; align-items: center;">
             <div style="background: white; padding: 40px; border-radius: 10px; min-width: 350px; max-width: 400px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
                 <h2 style="margin: 0 0 25px 0; color: #333; font-size: 24px;">请输入访问密码</h2>
-                <form id="passwordForm">
+                <div>
                     <input type="password" id="passwordInput" placeholder="请输入密码" 
                            style="width: 100%; padding: 15px; border: 2px solid #ddd; border-radius: 6px; 
                            font-size: 16px; margin-bottom: 15px; box-sizing: border-box;">
                     <div id="passwordError" style="display: none; color: #dc3545; margin-bottom: 15px; font-size: 14px;">
                         ❌ 密码错误，请重新输入
                     </div>
-                    <button type="submit" style="background: #007bff; color: white; border: none; 
+                    <button type="button" id="passwordSubmitBtn" style="background: #007bff; color: white; border: none; 
                             padding: 15px 30px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; font-weight: bold;">
                         确认登录
                     </button>
@@ -147,7 +159,7 @@ function createPasswordModal() {
                             padding: 15px 30px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 10px;">
                         取消
                     </button>
-                </form>
+                </div>
                 <div style="margin-top: 20px; font-size: 12px; color: #666;">
                     提示：请输入正确的访问密码
                 </div>
@@ -157,11 +169,26 @@ function createPasswordModal() {
     
     document.body.insertAdjacentHTML('beforeend', modalHTML);
     
-    // 绑定事件
-    const form = document.getElementById('passwordForm');
-    if (form) {
-        form.addEventListener('submit', handlePasswordSubmit);
-        console.log('密码表单事件已绑定');
+    // 绑定事件 - 使用按钮点击而不是表单提交
+    const submitBtn = document.getElementById('passwordSubmitBtn');
+    const passwordInput = document.getElementById('passwordInput');
+    
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            console.log('🔘 提交按钮被点击');
+            handlePasswordSubmit();
+        });
+        console.log('✅ 提交按钮事件已绑定');
+    }
+    
+    if (passwordInput) {
+        passwordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                console.log('🔘 回车键被按下');
+                handlePasswordSubmit();
+            }
+        });
+        console.log('✅ 回车键事件已绑定');
     }
 }
 
@@ -228,28 +255,65 @@ function hidePasswordModal() {
 /**
  * 处理密码提交事件
  */
-async function handlePasswordSubmit(e) {
-    e.preventDefault();
-    console.log('处理密码提交');
+async function handlePasswordSubmit() {
+    console.log('🚀 开始处理密码提交');
     
     const passwordInput = document.getElementById('passwordInput');
     const password = passwordInput ? passwordInput.value.trim() : '';
     
-    console.log('用户输入的密码长度:', password.length);
+    console.log('📝 用户输入的密码:', password);
+    console.log('📏 密码长度:', password.length);
     
-    if (await verifyPassword(password)) {
-        console.log('密码验证成功，隐藏弹窗');
-        hidePasswordModal();
-    } else {
-        console.log('密码验证失败，显示错误');
-        const errorElement = document.getElementById('passwordError');
-        if (errorElement) {
-            errorElement.style.display = 'block';
+    if (!password) {
+        console.log('❌ 密码为空');
+        showPasswordError('请输入密码');
+        return;
+    }
+    
+    // 禁用按钮，防止重复提交
+    const submitBtn = document.getElementById('passwordSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '验证中...';
+    }
+    
+    try {
+        console.log('🔐 开始验证密码...');
+        const isValid = await verifyPassword(password);
+        console.log('✅ 密码验证结果:', isValid);
+        
+        if (isValid) {
+            console.log('🎉 密码验证成功，隐藏弹窗');
+            hidePasswordModal();
+        } else {
+            console.log('❌ 密码验证失败，显示错误');
+            showPasswordError('密码错误，请重新输入');
+            if (passwordInput) {
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
         }
-        if (passwordInput) {
-            passwordInput.value = '';
-            passwordInput.focus();
+    } catch (error) {
+        console.error('💥 密码验证过程中出错:', error);
+        showPasswordError('验证失败，请重试');
+    } finally {
+        // 恢复按钮状态
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '确认登录';
         }
+    }
+}
+
+/**
+ * 显示密码错误信息
+ */
+function showPasswordError(message = '密码错误，请重新输入') {
+    const errorElement = document.getElementById('passwordError');
+    if (errorElement) {
+        errorElement.textContent = '❌ ' + message;
+        errorElement.style.display = 'block';
+        console.log('🚨 显示错误信息:', message);
     }
 }
 
